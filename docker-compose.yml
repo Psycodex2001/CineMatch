@@ -1,0 +1,80 @@
+# ──────────────────────────────────────────────────────────────────
+# CineMatch — docker-compose.yml
+#
+# Uso rápido (SQLite padrão):
+#   docker-compose up --build
+#
+# Com PostgreSQL (descomente o serviço "db" e a variável DATABASE_URL):
+#   docker-compose --profile postgres up --build
+# ──────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+
+  # ── API principal ──────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cinematch_api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persiste banco SQLite e cache do dataset entre reinicializações
+      - cinematch_data:/app/data
+    environment:
+      # SQLite (padrão) — troque pelo bloco PostgreSQL abaixo se quiser
+      - DATABASE_URL=sqlite:///./data/cinematch.db
+
+      # ── Configurações do modelo (opcionais) ──
+      - N_SVD_COMPONENTS=50
+      - CF_WEIGHT=0.6
+      - CB_WEIGHT=0.4
+      - DEFAULT_TOP_N=10
+
+      # ── PostgreSQL (descomente se usar o serviço "db") ──
+      # - DATABASE_URL=postgresql://cinematch:cinematch@db:5432/cinematch
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s   # O modelo leva tempo para treinar na primeira inicialização
+    restart: unless-stopped
+
+    # Aguarda o banco estar pronto (necessário só com PostgreSQL)
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # ── PostgreSQL (opcional) ──────────────────────────────────────
+  # Descomente este bloco para usar PostgreSQL em vez de SQLite.
+  # Lembre de também instalar psycopg2-binary no requirements.txt.
+  #
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: cinematch_db
+  #   profiles: ["postgres"]
+  #   environment:
+  #     - POSTGRES_USER=cinematch
+  #     - POSTGRES_PASSWORD=cinematch
+  #     - POSTGRES_DB=cinematch
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U cinematch"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+
+volumes:
+  cinematch_data:
+    driver: local
+  # postgres_data:
+  #   driver: local
